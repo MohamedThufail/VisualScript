@@ -1,0 +1,147 @@
+!pip install gtts
+!pip install mutagen
+!pip install googletrans==4.0.0-rc1
+
+  
+from googletrans import Translator
+from gtts import gTTS
+from google.colab import files
+from google.colab import drive
+drive.mount('/content/drive')
+from mutagen.mp3 import MP3
+import subprocess
+import os
+import math
+
+# TEXT INPUT AND GETTING LANGUAGE TRANSLATION CHOICE FROM USER
+
+print("Enter type of input : ")
+print("1. Text")
+print("2. File")
+input_choice = input("Enter input type : ")
+
+if input_choice == "1":
+  # Get input text from the user
+  text = input("Enter the text : ")
+
+elif input_choice == "2" :
+  uploaded_file = files.upload()
+  # Access the uploaded file
+  for filename, contents in uploaded_file.items():
+    print(f"Uploaded file: {filename}")
+    # Decode the file contents
+    text = contents.decode('utf-8')
+
+file_name = "speechoutput.mp3"
+trans_lang = input("Enter the target language to convert the text \n Tamil - ta \n Malayalam - ml \n Kannada - kn \n Telugu - te \n English - en \n Hindi - hi \n Afrikaans - af \n Arabic -  ar\n Chinese (Simplified) - zh-CN \n Chinese (Traditional) - zh-TW \n French - fr \n German - de \n Italian - it \n Japanese - ja \n Korean - ko \n Russian - ru \n Spanish - es \n Enter the Language code : ")
+uploaded = files.upload()
+
+def get_mp3_duration(file_path):
+    try:
+        audio = MP3(file_path)
+        duration_seconds = audio.info.length
+        return duration_seconds
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+# TRANSLATION OF GIVEN INPUT TEXT INTO SPECIFIED LANGUAGE
+
+def translate_text(text, target_language = trans_lang):
+    translator = Translator()
+    translated_text = translator.translate(text, dest=target_language)
+    return translated_text.text
+
+
+# CONVERTING THE TRANSLATED TEXT CONTENT INTO SPEECH
+
+
+text_to_translate = text
+translated_text = translate_text(text_to_translate, target_language = trans_lang)
+
+language = trans_lang
+
+
+tts = gTTS(text=translated_text, lang=language, slow=False)
+
+
+tts.save(file_name)
+
+
+print(f"Speech saved as {file_name}")
+
+dur = get_mp3_duration(file_name)
+if dur is not None:
+    print("Duration:", dur, "seconds")
+
+dura = math.ceil(dur)
+
+
+
+# GENERATING A VIDEO FOR THE GIVEN TEXT INPUT
+
+
+def repeat_video(input_video, output_duration, output_filename):
+
+    ffprobe_command = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', input_video]
+    duration = float(subprocess.check_output(ffprobe_command).strip())
+    repetitions = int(output_duration / duration) + 1
+
+
+    concat_file_path = 'concat.txt'
+    with open(concat_file_path, 'w') as f:
+        for _ in range(repetitions):
+            f.write(f"file '{input_video}'\n")
+
+
+    ffmpeg_command = [
+        'ffmpeg', '-f', 'concat', '-safe', '0', '-i', concat_file_path,
+        '-c', 'copy', output_filename
+    ]
+
+
+    process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+
+
+    if output_filename in os.listdir():
+        print("output")
+    else:
+        print("FFmpeg stdout:", stdout.decode())
+        print("FFmpeg stderr:", stderr.decode())
+        print("Output video file not found.")
+
+    os.remove(concat_file_path)
+
+
+input_video = list(uploaded.keys())[0]
+output_duration = dura
+output_filename = '4s2.mp4'
+
+repeat_video(input_video, output_duration, output_filename)
+
+
+
+# FINAL OUTPUT VIDEO GENERATION BY INSERTING AUDIO FILE INTO GENERATED VIDEO
+
+
+from moviepy.editor import *
+
+
+video = VideoFileClip(output_filename)
+
+audio = AudioFileClip(file_name)
+
+video = video.set_duration(audio.duration)
+
+final_clip = video.set_audio(audio)
+
+out_path = "/content/drive/My Drive/final_output.mp4"
+
+final_clip.write_videofile(out_path, codec="libx264", audio_codec="aac", temp_audiofile="temp-audio.m4a", remove_temp=True)
+
+files.download(out_path)
+
+# OUTPUT OBTAINED SUCCESSFULLY
+
+print("Final Output Obtained")
